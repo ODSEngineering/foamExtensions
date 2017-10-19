@@ -1,0 +1,1 @@
+for dir in `find * -maxdepth 0 -type d`; do cd $dir; wmake; cd ..; done;

@@ -1,0 +1,8 @@
+# Ensure that you are sudo if compiling to $(FOAM_LIBBIN)
+# sudo su
+# export FOAM_USER_LIBBIN=$FOAM_LIBBIN
+
+# source /opt/openfoam201/etc/bashrc
+
+cd applications; ./Allwmake; cd ../;
+

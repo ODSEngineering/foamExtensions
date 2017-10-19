@@ -1,0 +1,5 @@
+# source /opt/openfoam201/etc/bashrc
+
+cd applications;
+for dir in `find * -maxdepth 0 -type d`; do cd $dir; wclean; cd ..; done;
+cd ../;
