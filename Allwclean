@@ -1,4 +1,4 @@
-# source /opt/openfoam201/etc/bashrc
+#source /opt/openfoam50/etc/bashrc
 
 cd applications;
 for dir in `find * -maxdepth 0 -type d`; do cd $dir; wclean; cd ..; done;

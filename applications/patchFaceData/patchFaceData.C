@@ -28,9 +28,9 @@ Description
     Prints a list of rays to stdout suitable for feeding into the Radiance program
     rtrace in order to get ray-traced irradiance intensity over a patch.
     The output to stdout is in the form:
-    
+
     xorg yorg zorg xdir ydir zdir (one line per patch face)
-    
+
     By default rays start originate at the face-cell and point in the direction of the
     face-center.
 
@@ -57,8 +57,8 @@ void getPatchFaceData
 )
 {
     const scalar TOL = 1e-3;
-    /*Info << "Trying to read patch " << patchI 
-      << ", headerClassName:" << fieldHeader.headerClassName() 
+    /*Info << "Trying to read patch " << patchI
+      << ", headerClassName:" << fieldHeader.headerClassName()
       << ", FieldTypeName: " << FieldType::typeName << endl;
     */
 
@@ -146,7 +146,7 @@ int main(int argc, char *argv[])
     );
 
     // Get arguments
-    word patchName(args.additionalArgs()[0]);
+    word patchName(args.argRead<word>(1));
     word fieldName("");
     scalar zoffset;
     bool inclFaceData = args.optionFound("faceData");
@@ -161,14 +161,14 @@ int main(int argc, char *argv[])
             << exit(FatalError);
     }
 
-    
+
     const fvPatch& cPatch = mesh.boundary()[patchI];
     const vectorField& faceCenters = cPatch.Cf();
     const vectorField& faceNormals = cPatch.Sf();
     const scalarField& faceAreas = cPatch.magSf();
 
     List<std::string> lines(cPatch.size());
-    forAll(lines, lineI) { lines[lineI] = ""; } 
+    forAll(lines, lineI) { lines[lineI] = ""; }
 
     // If requested then get the cell details
     if (inclFaceData) {
@@ -198,14 +198,14 @@ int main(int argc, char *argv[])
         );
 
 
-        if (io.headerOk())
+        if ((io.typeHeaderOk<volScalarField>(false)) | (io.typeHeaderOk<volVectorField>(false)))
         {
             mesh.readUpdate();
 
             bool done = false;
             getPatchFaceData<volScalarField>(mesh, io, patchI, zoffset, lines, done);
             getPatchFaceData<volVectorField>(mesh, io, patchI, zoffset, lines, done);
-            
+
             if (!done)
             {
                 FatalError

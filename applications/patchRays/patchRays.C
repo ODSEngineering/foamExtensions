@@ -28,9 +28,9 @@ Description
     Prints a list of rays to stdout suitable for feeding into the Radiance program
     rtrace in order to get ray-traced irradiance intensity over a patch.
     The output to stdout is in the form:
-    
+
     xorg yorg zorg xdir ydir zdir (one line per patch face)
-    
+
     By default rays start originate at the face-cell and point in the direction of the
     face-center.
 
@@ -78,7 +78,7 @@ int main(int argc, char *argv[])
     );
 
     // Get arguments
-    word patchName(args.additionalArgs()[0]);
+    word patchName(args.argRead<word>(1));
     bool outwards = args.optionFound("awayFromPatch");
     bool onlyOrigins = args.optionFound("onlyOrigins");
 
@@ -106,16 +106,16 @@ int main(int argc, char *argv[])
         int m = 1;
         if (outwards) { delta = cPatch.nf(); m=-1; }
         else { delta = cPatch.delta(); }
-        
+
         // Now print the actual information
         vector rayOrigin(0.0,0.0,0.0);
         forAll(faceCenters, faceI)
         {
-            if (outwards) { rayOrigin = faceCenters[faceI]; } 
+            if (outwards) { rayOrigin = faceCenters[faceI]; }
             else { rayOrigin = (faceCenters[faceI] - delta[faceI]); }
 
             for (int i=0; i<3; i++) { Info << rayOrigin[i] << " "; }
-            if ( not onlyOrigins ) 
+            if ( not onlyOrigins )
             {
                 for (int i=0; i<3; i++) { Info << m*delta[faceI][i] << " "; }
             }

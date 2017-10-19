@@ -32,64 +32,91 @@ Description
 
 \*---------------------------------------------------------------------------*/
 
-#include "calc.H"
-#include "fvc.H"
+#include "fvCFD.H"
+#include "quaternion.H"
 #include "transformField.H"
 #include "transformGeometricField.H"
 #include "mathematicalConstants.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-void Foam::calc(const argList& args, const Time& runTime, const fvMesh& mesh)
+int main(int argc, char *argv[])
 {
-    bool writeResults = !args.optionFound("noWrite");
+    # include "setRootCase.H"
 
-    IOobject Uheader
+    Foam::Time runTime
     (
-        "U",
-        runTime.timeName(),
-        mesh,
-        IOobject::MUST_READ
+        Foam::Time::controlDictName,
+        args.rootPath(),
+        args.caseName()
     );
 
-    if (Uheader.headerOk())
+
+    instantList timeDirs = timeSelector::select0(runTime, args);
+    bool writeResults = !args.optionFound("noWrite");
+
+    forAll(timeDirs, timeI)
     {
-        Info<< "    Reading U" << endl;
-        volVectorField U(Uheader, mesh);
+      runTime.setTime(timeDirs[timeI], timeI);
 
-        // Convert to radians
-        scalar PI = Foam::constant::mathematical::pi;
-        double r = -1.0*runTime.time().value()*PI/180.0;
-        quaternion R(0.0, 0.0, r);
-        tensor T = R.R();
-        dimensionedTensor dimT("t", U.dimensions(), T);
+      Foam::fvMesh mesh
+      (
+          Foam::IOobject
+          (
+              Foam::fvMesh::defaultRegion,
+              runTime.timeName(),
+              runTime,
+              Foam::IOobject::MUST_READ
+          )
+      );
+
+      IOobject Uheader
+      (
+          "U",
+          runTime.timeName(),
+          mesh,
+          IOobject::MUST_READ
+      );
+
+      if (Uheader.typeHeaderOk<volVectorField>(false))
+      {
+          Info<< "    Reading U" << endl;
+          volVectorField U(Uheader, mesh);
+
+          // Convert to radians
+          scalar PI = Foam::constant::mathematical::pi;
+          double r = -1.0*runTime.time().value()*PI/180.0;
+          quaternion R(vector(0, 0, 1), r);
+          tensor T = R.R();
+          dimensionedTensor dimT("t", U.dimensions(), T);
 
 
-        Info<< "    Rotating Velocity Vectors by " << r << " radians" << endl;
-        volVectorField Utrans
-        (
-            IOobject
-            (
-                "Utrans",
-                runTime.timeName(),
-                mesh,
-                IOobject::NO_READ
-            ),
-            U
-        );
-        transform(Utrans, dimT, Utrans);
+          Info<< "    Rotating Velocity Vectors by " << r << " radians" << endl;
+          volVectorField Utrans
+          (
+              IOobject
+              (
+                  "Utrans",
+                  runTime.timeName(),
+                  mesh,
+                  IOobject::NO_READ
+              ),
+              U
+          );
+          transform(Utrans, dimT, Utrans);
 
-        if (writeResults)
-        {
-            Utrans.write();
-        }
+          if (writeResults)
+          {
+              Utrans.write();
+          }
+      }
+      else
+      {
+          Info<< "    No U" << endl;
+      }
+
+      Info<< "\nEnd\n" << endl;
     }
-    else
-    {
-        Info<< "    No U" << endl;
-    }
-
-    Info<< "\nEnd\n" << endl;
 }
 
 

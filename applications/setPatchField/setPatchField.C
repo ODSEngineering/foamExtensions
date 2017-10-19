@@ -59,8 +59,8 @@ int main(int argc, char *argv[])
     instantList timeDirs = timeSelector::select0(runTime, args);
 #   include "createMesh.H"
 
-    word fieldName(args.additionalArgs()[0]);
-    word patchName(args.additionalArgs()[1]);
+    word fieldName(args.argRead<word>(1));
+    word patchName(args.argRead<word>(2));
 
     typedef GeometricField<scalar, fvPatchField, volMesh> fieldType;
 
@@ -68,7 +68,7 @@ int main(int argc, char *argv[])
     {
         runTime.setTime(timeDirs[timeI], timeI);
         Info<< "Time = " << runTime.timeName() << endl;
-        
+
         IOobject fieldHeader
         (
             fieldName,
@@ -78,7 +78,7 @@ int main(int argc, char *argv[])
         );
 
         // Check field exists
-        if (fieldHeader.headerOk())
+        if (fieldHeader.typeHeaderOk<volScalarField>(false))
         {
             Info<< "    Setting patchField values of "
                 << fieldHeader.headerClassName()
@@ -103,7 +103,7 @@ int main(int argc, char *argv[])
             (
                 patchValues,
                 patchSize
-            ).assign(field.boundaryField()[patchi]);
+            ) = field.boundaryField()[patchi];
 
             for (i=0; i<values.size(); i++)
             {
@@ -114,14 +114,17 @@ int main(int argc, char *argv[])
                 << field.boundaryField()[patchi].patch().name()
                 << " set " << patchSize << " values" << endl;
 
-            field.boundaryField()[patchi] == SubField<scalar>
+            typename GeometricField<scalar, fvPatchField, volMesh>::
+                        Boundary& fieldBf = field.boundaryFieldRef();
+
+            fieldBf[patchi] == SubField<scalar>
             (
                 patchValues,
                 patchSize
             );
 
             field.write();
-            
+
         }
     }
 
@@ -129,4 +132,3 @@ int main(int argc, char *argv[])
 
     return 1;
 }
-
