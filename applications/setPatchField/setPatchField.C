@@ -39,16 +39,129 @@ Description
 #include "Ostream.H"
 #include "fvCFD.H"
 
+std::vector<float> lineToVect(std::string str, char delimiter) {
+  std::vector<float> vect;
+  std::stringstream ss(str); // Turn the string into a stream.
+  string tok;
+
+  while(getline(ss, tok, delimiter)) {
+    vect.push_back( atof(tok.c_str()) );
+  }
+
+  return vect;
+}
+
+
+void setVectorPatchField
+(
+    const fvMesh& mesh,
+    const IOobject& fieldHeader,
+    const label patchi,
+    std::vector<float>& values,
+    bool& done
+)
+{
+    unsigned int nValues = values.size() / 3;
+
+    if (!done)
+    {
+      typedef GeometricField<vector, fvPatchField, volMesh> fieldType;
+      fieldType field(fieldHeader, mesh);
+
+      unsigned int patchSize = field.boundaryField()[patchi].size();
+      if ( patchSize != nValues ) {
+        std::cout << "Patch size ( " << patchSize << " ) != number of values ( " << nValues << " ) exiting"<< std::endl;
+        return;
+      }
+
+      Field<vector> patchValues( nValues );
+
+      SubField<vector>
+      (
+          patchValues,
+          patchSize
+      ).assign(field.boundaryField()[patchi]);
+
+      for (unsigned int i=0; i<nValues; i++)
+      {
+          for(int j = 0; j < 3; ++j) {
+            patchValues[i][j] = values[i*3 + j];
+          }
+      }
+
+      Info<< "    On patch "
+          << field.boundaryField()[patchi].patch().name()
+          << " set " << patchSize << " values" << endl;
+
+      field.boundaryField()[patchi] == SubField<vector>
+      (
+          patchValues,
+          patchSize
+      );
+
+      field.write();
+
+      done = true;
+    }
+}
+
+void setScalarPatchField
+(
+    const fvMesh& mesh,
+    const IOobject& fieldHeader,
+    const label patchi,
+    std::vector<float>& values,
+    bool& done
+)
+{
+    if (!done)
+    {
+      typedef GeometricField<scalar, fvPatchField, volMesh> fieldType;
+      fieldType field(fieldHeader, mesh);
+
+      unsigned int patchSize = field.boundaryField()[patchi].size();
+      if ( patchSize != values.size() ) {
+        std::cout << "Patch size ( " << patchSize << " ) != number of values ( " << values.size() << " ) exiting"<< std::endl;
+        return;
+      }
+
+      Field<scalar> patchValues( values.size() );
+
+      SubField<scalar>
+      (
+          patchValues,
+          patchSize
+      ).assign(field.boundaryField()[patchi]);
+
+      for (unsigned int i=0; i<values.size(); i++)
+      {
+          patchValues[i] = values[i];
+      }
+
+      Info<< "    On patch "
+          << field.boundaryField()[patchi].patch().name()
+          << " set " << patchSize << " values" << endl;
+
+      field.boundaryField()[patchi] == SubField<scalar>
+      (
+          patchValues,
+          patchSize
+      );
+
+      field.write();
+
+      done = true;
+    }
+}
+
 int main(int argc, char *argv[])
 {
-    unsigned int i = 0;
-
-    // Read in float-values (one per line)
+    // Read in values
     float f;
     std::vector<float> values;
     while (std::cin >> f) { values.push_back(f); }
 
-    std::cout << "Read " << values.size() << " values."<< std::endl;
+    std::cout << "Read " << values.size() << " values from stdin."<< std::endl;
 
     timeSelector::addOptions();
     argList::noBanner();
@@ -62,71 +175,56 @@ int main(int argc, char *argv[])
     word fieldName(args.additionalArgs()[0]);
     word patchName(args.additionalArgs()[1]);
 
-    typedef GeometricField<scalar, fvPatchField, volMesh> fieldType;
+    // Check if this patch exists
+    label patchI = mesh.boundaryMesh().findPatchID(patchName);
+    if (patchI < 0)
+    {
+        FatalError
+            << "Unable to find patch " << patchName << nl
+            << exit(FatalError);
+    }
 
     forAll(timeDirs, timeI)
     {
-        runTime.setTime(timeDirs[timeI], timeI);
-        Info<< "Time = " << runTime.timeName() << endl;
-        
-        IOobject fieldHeader
-        (
-            fieldName,
-            mesh.time().timeName(),
-            mesh,
-            IOobject::MUST_READ
-        );
+      runTime.setTime(timeDirs[timeI], timeI);
+      Info<< "Time = " << runTime.timeName() << endl;
 
-        // Check field exists
-        if (fieldHeader.headerOk())
-        {
-            Info<< "    Setting patchField values of "
-                << fieldHeader.headerClassName()
-                << " " << fieldName << endl;
+      IOobject io
+      (
+          fieldName,
+          runTime.timeName(),
+          mesh,
+          IOobject::MUST_READ
+      );
 
-            fieldType field(fieldHeader, mesh);
 
-            label patchi = mesh.boundaryMesh().findPatchID(patchName);
-            if (patchi < 0)
-            {
-                FatalError
-                    << "Unable to find patch " << patchName << nl
-                    << exit(FatalError);
-            }
+      if (io.headerOk())
+      {
+          mesh.readUpdate();
 
-            unsigned int patchSize = field.boundaryField()[patchi].size();
-            if ( patchSize != values.size() ) { return 0; }
+          bool done = false;
+          if ( io.headerClassName() == "volScalarField") {
+            setScalarPatchField(mesh, io, patchI, values, done);
+          } else {
+            setVectorPatchField(mesh, io, patchI, values, done);
+          }
 
-            Field<scalar> patchValues( values.size() );
-
-            SubField<scalar>
-            (
-                patchValues,
-                patchSize
-            ).assign(field.boundaryField()[patchi]);
-
-            for (i=0; i<values.size(); i++)
-            {
-                patchValues[i] = values[i];
-            }
-
-            Info<< "    On patch "
-                << field.boundaryField()[patchi].patch().name()
-                << " set " << patchSize << " values" << endl;
-
-            field.boundaryField()[patchi] == SubField<scalar>
-            (
-                patchValues,
-                patchSize
-            );
-
-            field.write();
-            
-        }
+          if (!done)
+          {
+              FatalError
+                  << "Only possible to average volFields."
+                  << " Field " << fieldName << " is of type "
+                  << io.headerClassName()
+                  << nl << exit(FatalError);
+          }
+      }
+      else
+      {
+          Info<< "    No field " << fieldName << endl;
+      }
     }
 
     Info<< "End\n" << endl;
 
     return 1;
 }
-
