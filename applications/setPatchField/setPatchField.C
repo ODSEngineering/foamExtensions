@@ -51,13 +51,41 @@ std::vector<float> lineToVect(std::string str, char delimiter) {
   return vect;
 }
 
-
-void setVectorPatchField
+std::vector<std::vector<std::vector<float> > > getValueArray
 (
     const fvMesh& mesh,
     const IOobject& fieldHeader,
+    wordList patchNames,
+    unsigned int nTimes,
+    std::vector<float>& values
+)
+{
+  word patchName;
+  typedef GeometricField<scalar, fvPatchField, volMesh> fieldType;
+  fieldType field(fieldHeader, mesh);
+
+  unsigned int nPatches = patchNames.size();
+  std::vector<std::vector<std::vector<float> > > valueArray;
+  valueArray.resize(nPatches);
+  for ( unsigned int i = 0 ; i < nTimes ; i++ ) { valueArray[i].resize(nTimes); }
+  //TODO: Step through all patches getting their size and setting a data structure
+  //forAll(patchNames, patchNameI)
+  //{
+    //patchName = patchNames[patchNameI];
+    //unsigned int patchSize = field.boundaryField()[patchi].size();
+  //}
+  return valueArray;
+}
+
+int setVectorPatchField
+(
+    const fvMesh& mesh,
+    const IOobject& fieldHeader,
+    const label timei,
+    unsigned int nTimes,
     const label patchi,
     std::vector<float>& values,
+    int& start_marker,
     bool& done
 )
 {
@@ -69,9 +97,9 @@ void setVectorPatchField
       fieldType field(fieldHeader, mesh);
 
       unsigned int patchSize = field.boundaryField()[patchi].size();
-      if ( patchSize != nValues ) {
+      if ( (start_marker + patchSize) > nValues ) {
         std::cout << "Patch size ( " << patchSize << " ) != number of values ( " << nValues << " ) exiting"<< std::endl;
-        return;
+        return 0;
       }
 
       Field<vector> patchValues( nValues );
@@ -82,12 +110,16 @@ void setVectorPatchField
           patchSize
       ).assign(field.boundaryField()[patchi]);
 
-      for (unsigned int i=0; i<nValues; i++)
+      int index = 0;
+      for (unsigned int i=0; i<patchSize; i++)
       {
+          index = start_marker + i*nTimes + timei;
           for(int j = 0; j < 3; ++j) {
-            patchValues[i][j] = values[i*3 + j];
+            patchValues[i][j] = values[index*3 + j];
           }
       }
+
+      //Info << "Max index " << index << endl;
 
       Info<< "    On patch "
           << field.boundaryField()[patchi].patch().name()
@@ -102,15 +134,20 @@ void setVectorPatchField
       field.write();
 
       done = true;
+      return nTimes*patchSize;
     }
+  return 0;
 }
 
-void setScalarPatchField
+int setScalarPatchField
 (
     const fvMesh& mesh,
     const IOobject& fieldHeader,
+    const label timei,
+    unsigned int nTimes,
     const label patchi,
     std::vector<float>& values,
+    int& start_marker,
     bool& done
 )
 {
@@ -120,9 +157,10 @@ void setScalarPatchField
       fieldType field(fieldHeader, mesh);
 
       unsigned int patchSize = field.boundaryField()[patchi].size();
-      if ( patchSize != values.size() ) {
+
+      if ( (start_marker + patchSize) > values.size() ) {
         std::cout << "Patch size ( " << patchSize << " ) != number of values ( " << values.size() << " ) exiting"<< std::endl;
-        return;
+        return 0;
       }
 
       Field<scalar> patchValues( values.size() );
@@ -133,9 +171,10 @@ void setScalarPatchField
           patchSize
       ).assign(field.boundaryField()[patchi]);
 
-      for (unsigned int i=0; i<values.size(); i++)
+      for (unsigned int i=0; i<patchSize; i++)
       {
-          patchValues[i] = values[i];
+          int index = start_marker + i*nTimes + timei;
+          patchValues[i] = values[index];
       }
 
       Info<< "    On patch "
@@ -151,7 +190,10 @@ void setScalarPatchField
       field.write();
 
       done = true;
+
+      return nTimes*patchSize;
     }
+    return 0;
 }
 
 int main(int argc, char *argv[])
@@ -161,12 +203,17 @@ int main(int argc, char *argv[])
     std::vector<float> values;
     while (std::cin >> f) { values.push_back(f); }
 
+    //TODO:: Read in multiple time values and multiple patches in one hit
+    // Parse in a huge array from stdin with the values ordered by:
+    // cell*times*patch and then parse that into a dictionary or array or arrays
+    // which we can then use to set the values
     std::cout << "Read " << values.size() << " values from stdin."<< std::endl;
 
     timeSelector::addOptions();
     argList::noBanner();
     argList::validArgs.append("fieldName");
     argList::validArgs.append("patchName");
+    argList::addOption("patchNames", "patchNames");
 #   include "setRootCase.H"
 #   include "createTime.H"
     instantList timeDirs = timeSelector::select0(runTime, args);
@@ -174,56 +221,77 @@ int main(int argc, char *argv[])
 
     word fieldName(args.additionalArgs()[0]);
     word patchName(args.additionalArgs()[1]);
+    wordList patchNames;
 
-    // Check if this patch exists
-    label patchI = mesh.boundaryMesh().findPatchID(patchName);
-    if (patchI < 0)
-    {
-        FatalError
-            << "Unable to find patch " << patchName << nl
-            << exit(FatalError);
+    if (args.optionFound("patchNames")) {
+      patchNames = args.optionReadList<word>("patchNames");
+    } else {
+      patchNames.append(patchName);
     }
+    Info << "Calculating for patche(s):" << patchNames << endl;
 
-    forAll(timeDirs, timeI)
+    unsigned int nTimes = timeDirs.size();
+    Info << "Number of times = " << nTimes << endl;
+
+    int counter = 0;
+    int start_marker = 0;
+    forAll(patchNames, patchNameI)
     {
-      runTime.setTime(timeDirs[timeI], timeI);
-      Info<< "Time = " << runTime.timeName() << endl;
+      start_marker += counter;
+      patchName = patchNames[patchNameI];
 
-      IOobject io
-      (
-          fieldName,
-          runTime.timeName(),
-          mesh,
-          IOobject::MUST_READ
-      );
+      Info << "Setting patch " << patchName << endl;
+      Info << "Start marker at "<< start_marker << endl;
 
-
-      if (io.headerOk())
+      // Check if this patch exists
+      label patchI = mesh.boundaryMesh().findPatchID(patchName);
+      if (patchI < 0)
       {
-          mesh.readUpdate();
-
-          bool done = false;
-          if ( io.headerClassName() == "volScalarField") {
-            setScalarPatchField(mesh, io, patchI, values, done);
-          } else {
-            setVectorPatchField(mesh, io, patchI, values, done);
-          }
-
-          if (!done)
-          {
-              FatalError
-                  << "Only possible to average volFields."
-                  << " Field " << fieldName << " is of type "
-                  << io.headerClassName()
-                  << nl << exit(FatalError);
-          }
+          FatalError
+              << "Unable to find patch " << patchName << nl
+              << exit(FatalError);
       }
-      else
+
+      forAll(timeDirs, timeI)
       {
-          Info<< "    No field " << fieldName << endl;
+        runTime.setTime(timeDirs[timeI], timeI);
+        Info<< "Time = " << runTime.timeName() << endl;
+
+        IOobject io
+        (
+            fieldName,
+            runTime.timeName(),
+            mesh,
+            IOobject::MUST_READ
+        );
+
+
+        if (io.headerOk())
+        {
+            mesh.readUpdate();
+
+            bool done = false;
+            if ( io.headerClassName() == "volScalarField") {
+              counter = setScalarPatchField(mesh, io, timeI, nTimes, patchI, values, start_marker, done);
+            } else {
+              counter = setVectorPatchField(mesh, io, timeI, nTimes, patchI, values, start_marker, done);
+            }
+
+            if (!done)
+            {
+                FatalError
+                    << "Only possible to average volVectorFields or volScalarFields."
+                    << " Field " << fieldName << " is of type "
+                    << io.headerClassName()
+                    << nl << exit(FatalError);
+            }
+        }
+        else
+        {
+            Info<< "    No field " << fieldName << endl;
+        }
       }
     }
-
     Info<< "End\n" << endl;
 
     return 1;
