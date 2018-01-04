@@ -52,84 +52,91 @@ void getPatchFaceData
     const fvMesh& mesh,
     const meshSearch& meshSearchEngine,
     const IOobject& fieldHeader,
-    const label patchI,
+    const wordList& patchNames,
     const scalar& zoff,
-    List<std::string>& lines,
-    bool& done
+    List<List<std::string> >& patchLines,
+    bool& done,
+    bool& writeToCSV
 )
 {
-    clock_t time_start = std::clock();
-    clock_t search_start = std::clock();
-    clock_t string_start = std::clock();
-    double elapsed_secs = 0;
-    double search_time = 0;
-    double string_time = 0;
+    //clock_t time_start = std::clock();
+    //clock_t search_start = std::clock();
+    //clock_t string_start = std::clock();
+    //double elapsed_secs = 0;
+    //double search_time = 0;
+    //double string_time = 0;
 
     const scalar TOL = 1e-3;
-    /*Info << "Trying to read patch " << patchI
-      << ", headerClassName:" << fieldHeader.headerClassName()
-      << ", FieldTypeName: " << FieldType::typeName << endl;
-    */
 
     if (!done && fieldHeader.headerClassName() == FieldType::typeName)
     {
-        Info << "     Reading " << fieldHeader.headerClassName() << " " << fieldHeader.name() << endl;
+        //Info << "     Reading " << fieldHeader.headerClassName() << " " << fieldHeader.name() << endl;
 
         FieldType field(fieldHeader, mesh);
-        elapsed_secs = double(std::clock() - time_start) / CLOCKS_PER_SEC;
-        Info << "     Got FieldType " << elapsed_secs << endl;
+        //elapsed_secs = double(std::clock() - time_start) / CLOCKS_PER_SEC;
+        //Info << "     Got FieldType " << elapsed_secs << endl;
 
-        Field<typename FieldType::value_type> faceField = field.boundaryField()[patchI].patchInternalField();
-        elapsed_secs = double(std::clock() - time_start) / CLOCKS_PER_SEC;
-        Info << "     Got faceField " << elapsed_secs << endl;
+        forAll(patchNames, patchNameI)
+        {
+          word patchName = patchNames[patchNameI];
+          label patchI = mesh.boundaryMesh().findPatchID(patchName);
+          if (writeToCSV) {
+            Info << "     Getting data from patch " <<  patchName << " (size " << patchLines[patchNameI].size() << ")" << endl;
+          }
 
-        //Set up a stream to write the value to
-        std::ostringstream buf;
-        OSstream valueString(buf, "value");
 
-        elapsed_secs = double(std::clock() - time_start) / CLOCKS_PER_SEC;
-        Info << "     Created string buffer " << elapsed_secs << endl;
+          Field<typename FieldType::value_type> faceField = field.boundaryField()[patchI].patchInternalField();
+          //elapsed_secs = double(std::clock() - time_start) / CLOCKS_PER_SEC;
+          //Info << "     Got faceField " << elapsed_secs << endl;
 
-	      // Now print the actual information
-        if (fabs(zoff) < TOL) {
-            forAll(faceField, faceI)
-            {
-                valueString << faceField[faceI];
-                if (lines[faceI] != "") { lines[faceI] += ","; }
-                lines[faceI] += buf.str();
-                buf.str("");buf.clear();
-                valueString.flush();
-            }
-        } else {
-            elapsed_secs = double(std::clock() - time_start) / CLOCKS_PER_SEC;
-            Info << "     Got mesh search engine " << elapsed_secs << endl;
-            const fvPatch& cPatch = mesh.boundary()[patchI];
-            const vectorField& faceCenters = cPatch.Cf();
-            forAll(faceCenters, faceI)
-            {
-                // Measure the time for the search
-                search_start = std::clock();
-                point samplePoint = faceCenters[faceI];
-                samplePoint[2] += zoff;
-                label cellI = meshSearchEngine.findCell(samplePoint);
-                // Record the total search time
-                search_time += double(std::clock() - search_start) / CLOCKS_PER_SEC;
+          //Set up a stream to write the value to
+          std::ostringstream buf;
+          OSstream valueString(buf, "value");
 
-                // Do the string operations
-                string_start = std::clock();
-                if (cellI >= 0) {
-                    valueString << field[cellI];
-                } else {
-                    valueString << faceField[faceI];
-                }
-                if (lines[faceI] != "") { lines[faceI] += ","; }
-                lines[faceI] += buf.str();
-                buf.str("");buf.clear();
-                valueString.flush();
-                string_time += double(std::clock() - string_start) / CLOCKS_PER_SEC;
-            }
-            elapsed_secs = double(std::clock() - time_start) / CLOCKS_PER_SEC;
-            Info << "     Probed all sample points ( Search time =" << search_time << ", String time = " << string_time << ") " << elapsed_secs << endl;
+          //elapsed_secs = double(std::clock() - time_start) / CLOCKS_PER_SEC;
+          //Info << "     Created string buffer " << elapsed_secs << endl;
+
+  	      // Now print the actual information
+          if (fabs(zoff) < TOL) {
+              forAll(faceField, faceI)
+              {
+                  valueString << faceField[faceI];
+                  if (patchLines[patchNameI][faceI] != "") { patchLines[patchNameI][faceI] += ","; }
+                  patchLines[patchNameI][faceI] += buf.str();
+                  buf.str("");buf.clear();
+                  valueString.flush();
+              }
+          } else {
+              //elapsed_secs = double(std::clock() - time_start) / CLOCKS_PER_SEC;
+              //Info << "     Got mesh search engine " << elapsed_secs << endl;
+              const fvPatch& cPatch = mesh.boundary()[patchI];
+              const vectorField& faceCenters = cPatch.Cf();
+              forAll(faceCenters, faceI)
+              {
+                  // Measure the time for the search
+                  //search_start = std::clock();
+                  point samplePoint = faceCenters[faceI];
+                  samplePoint[2] += zoff;
+                  label cellI = meshSearchEngine.findCell(samplePoint);
+                  // Record the total search time
+                  //search_time += double(std::clock() - search_start) / CLOCKS_PER_SEC;
+
+                  // Do the string operations
+                  //string_start = std::clock();
+                  if (cellI >= 0) {
+                      valueString << field[cellI];
+                  } else {
+                      valueString << faceField[faceI];
+                  }
+                  if (patchLines[patchNameI][faceI] != "") { patchLines[patchNameI][faceI] += ","; }
+                  patchLines[patchNameI][faceI] += buf.str();
+                  buf.str("");buf.clear();
+                  valueString.flush();
+                  //string_time += double(std::clock() - string_start) / CLOCKS_PER_SEC;
+              }
+              //elapsed_secs = double(std::clock() - time_start) / CLOCKS_PER_SEC;
+              //Info << "     Probed all sample points ( Search time =" << search_time << ", String time = " << string_time << ") " << elapsed_secs << endl;
+          }
         }
         done = true;
     }
@@ -170,7 +177,7 @@ int main(int argc, char *argv[])
     }
 
     // Get a cache of patch files
-    std::vector<List<std::string>> patchLines(patchNames.count());
+    List<List<std::string> > patchLines(patchNames.size());
 
     // Avoid printing output by doing this instead:
     //#   include "createTime.H"
@@ -200,11 +207,12 @@ int main(int argc, char *argv[])
     (void)mesh.tetBasePtIs();
     meshSearch meshSearchEngine(mesh);
 
+    // First go through each patch and get the patch details
     forAll(patchNames, patchNameI)
     {
       patchName = patchNames[patchNameI];
       if (writeToCSV) {
-        Info << "Calculating for patch:" << patchName << endl;
+        Info << "Getting face details for patch: " << patchName << endl;
       }
 
       label patchI = mesh.boundaryMesh().findPatchID(patchName);
@@ -222,9 +230,8 @@ int main(int argc, char *argv[])
       const scalarField& faceAreas = cPatch.magSf();
 
       //List<std::string> lines(cPatch.size());
-      List<std::string> lines = patchLines[patchNameI];
-      lines.resize(cPatch.size());
-      forAll(lines, lineI) { lines[lineI] = ""; }
+      patchLines[patchNameI].resize(cPatch.size());
+      forAll(patchLines[patchNameI], lineI) { patchLines[patchNameI][lineI] = ""; }
 
       // If requested then get the cell details
       if (inclFaceData) {
@@ -233,63 +240,66 @@ int main(int argc, char *argv[])
 
           forAll(faceCenters, faceI) {
               cellDetails << faceCenters[faceI] << "," << faceNormals[faceI] << "," << faceAreas[faceI];
-              lines[faceI] += cellbuf.str();
+              patchLines[patchNameI][faceI] += cellbuf.str();
               cellbuf.str("");cellbuf.clear();cellDetails.flush();
           }
       }
+    }
 
-
-      forAll(timeDirs, timeI)
-      {
-        runTime.setTime(timeDirs[timeI], timeI);
-        if (writeToCSV) {
-          Info << " - Time = " << runTime.timeName() << endl;
-        }
-
-
-        IOobject io
-        (
-            fieldName,
-            runTime.timeName(),
-            mesh,
-            IOobject::MUST_READ
-        );
-        if (writeToCSV) { Info << "   - Loaded IOObject complete" << endl; }
-
-        if (io.headerOk())
-        {
-            mesh.readUpdate();
-            if (writeToCSV) { Info << "   - Mesh readUpdate complete" << endl; }
-
-            bool done = false;
-            getPatchFaceData<volScalarField>(mesh, meshSearchEngine, io, patchI, zoffset, lines, done);
-            getPatchFaceData<volVectorField>(mesh, meshSearchEngine, io, patchI, zoffset, lines, done);
-            if (writeToCSV) { Info << "   - getPatchFaceData complete" << endl; }
-
-            if (!done)
-            {
-                FatalError
-                    << "Only possible to average volFields."
-                    << " Field " << fieldName << " is of type "
-                    << io.headerClassName()
-                    << nl << exit(FatalError);
-            }
-        }
-        else
-        {
-            Info<< "    No field " << fieldName << endl;
-        }
+    // Now step through each time and extract the probe data
+    forAll(timeDirs, timeI)
+    {
+      runTime.setTime(timeDirs[timeI], timeI);
+      if (writeToCSV) {
+        Info << " - Time = " << runTime.timeName() << endl;
       }
 
-     // Write the results out to a file
-     if (writeToCSV) {
-       OFstream fWriter ( runTime.path()/(patchName + "." + fieldName) );
-       forAll(lines, lineI) { fWriter << lines[lineI].c_str() << endl; }
-       Info << "Written patch: " << patchName << " for field: " << fieldName << endl;
-     } else {
-       forAll(lines, lineI) { Info << lines[lineI].c_str() << endl; }
-     }
+      IOobject io
+      (
+          fieldName,
+          runTime.timeName(),
+          mesh,
+          IOobject::MUST_READ
+      );
+      //if (writeToCSV) { Info << "   - Loaded IOObject complete" << endl; }
 
+      if (io.headerOk())
+      {
+          mesh.readUpdate();
+          //if (writeToCSV) { Info << "   - Mesh readUpdate complete" << endl; }
+
+          // For each patch extract the patch probe data
+          bool done = false;
+          getPatchFaceData<volScalarField>(mesh, meshSearchEngine, io, patchNames, zoffset, patchLines, done, writeToCSV);
+          getPatchFaceData<volVectorField>(mesh, meshSearchEngine, io, patchNames, zoffset, patchLines, done, writeToCSV);
+
+          //if (writeToCSV) { Info << "   - getPatchFaceData complete" << endl; }
+
+          if (!done)
+          {
+              FatalError
+                  << "Only possible to average volFields."
+                  << " Field " << fieldName << " is of type "
+                  << io.headerClassName()
+                  << nl << exit(FatalError);
+          }
+      }
+      else
+      {
+          Info<< "    No field " << fieldName << endl;
+      }
+    }
+
+   // Write the results out to a file
+   forAll(patchNames, patchNameI)
+   {
+     if (writeToCSV) {
+       OFstream fWriter ( runTime.path()/(patchNames[patchNameI] + "." + fieldName) );
+       forAll(patchLines[patchNameI], lineI) { fWriter << patchLines[patchNameI][lineI].c_str() << endl; }
+       Info << "Written patch: " << patchNames[patchNameI] << " for field: " << fieldName << endl;
+     } else {
+       forAll(patchLines[patchNameI], lineI) { Info << patchLines[patchNameI][lineI].c_str() << endl; }
+     }
    }
 
     return 0;
