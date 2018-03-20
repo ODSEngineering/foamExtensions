@@ -55,6 +55,8 @@ void getPatchFaceData
     const wordList& patchNames,
     const scalar& zoff,
     List<List<std::string> >& patchLines,
+    List<List<point> >& patchSamplePoints,
+    List<List<label> >& patchSampleCells,
     bool& done,
     bool& writeToCSV
 )
@@ -113,19 +115,15 @@ void getPatchFaceData
               const vectorField& faceCenters = cPatch.Cf();
               forAll(faceCenters, faceI)
               {
-                  // Measure the time for the search
-                  //search_start = std::clock();
-                  point samplePoint = faceCenters[faceI];
-                  samplePoint[2] += zoff;
-                  label cellI = meshSearchEngine.findCell(samplePoint);
-                  // Record the total search time
-                  //search_time += double(std::clock() - search_start) / CLOCKS_PER_SEC;
+                  //point samplePoint = patchSamplePoints[patchNameI][faceI];
+                  label cellI = patchSampleCells[patchNameI][faceI];
 
                   // Do the string operations
                   //string_start = std::clock();
                   if (cellI >= 0) {
                       valueString << field[cellI];
                   } else {
+                      // Return the surface value if the sample point is not found
                       valueString << faceField[faceI];
                   }
                   if (patchLines[patchNameI][faceI] != "") { patchLines[patchNameI][faceI] += ","; }
@@ -178,6 +176,10 @@ int main(int argc, char *argv[])
 
     // Get a cache of patch files
     List<List<std::string> > patchLines(patchNames.size());
+
+    // Get the points that we will sample on each patch
+    List<List<point> > patchSamplePoints(patchNames.size());
+    List<List<label> > patchSampleCells(patchNames.size());
 
     // Avoid printing output by doing this instead:
     //#   include "createTime.H"
@@ -244,7 +246,22 @@ int main(int argc, char *argv[])
               cellbuf.str("");cellbuf.clear();cellDetails.flush();
           }
       }
+
+      // Assume a static mesh so get the sample points out now
+      patchSamplePoints[patchNameI].resize(cPatch.size());
+      patchSampleCells[patchNameI].resize(cPatch.size());
+      // Get the values for all 
+      forAll(faceCenters, faceI) {
+        point samplePoint = faceCenters[faceI];
+        samplePoint[2] += zoffset;
+        label cellI = meshSearchEngine.findCell(samplePoint);
+
+        patchSamplePoints[patchNameI][faceI] = samplePoint;
+        patchSampleCells[patchNameI][faceI] = cellI;
+      }
     }
+
+
 
     // Now step through each time and extract the probe data
     forAll(timeDirs, timeI)
@@ -270,8 +287,8 @@ int main(int argc, char *argv[])
 
           // For each patch extract the patch probe data
           bool done = false;
-          getPatchFaceData<volScalarField>(mesh, meshSearchEngine, io, patchNames, zoffset, patchLines, done, writeToCSV);
-          getPatchFaceData<volVectorField>(mesh, meshSearchEngine, io, patchNames, zoffset, patchLines, done, writeToCSV);
+          getPatchFaceData<volScalarField>(mesh, meshSearchEngine, io, patchNames, zoffset, patchLines, patchSamplePoints, patchSampleCells, done, writeToCSV);
+          getPatchFaceData<volVectorField>(mesh, meshSearchEngine, io, patchNames, zoffset, patchLines, patchSamplePoints, patchSampleCells, done, writeToCSV);
 
           //if (writeToCSV) { Info << "   - getPatchFaceData complete" << endl; }
 
