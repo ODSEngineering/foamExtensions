@@ -1,0 +1,40 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \    /   O peration     | Version:  1.7.1                                 |
+|   \  /    A nd           | Web:      www.OpenFOAM.com                      |
+|    \/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      turbulenceProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// Place this in constant/source
+
+scalarSource1
+{
+    type            scalarExplicitSource;
+    active          true;
+    timeStart       0;
+    duration        1000000;
+    selectionMode   all;            //all|points|cellSet|cellZone
+    //points
+    //(
+    //    (0.0 0.0 1.0)
+    //);
+    //  cellSet         someBox;
+
+    scalarExplicitSourceCoeffs
+    {
+        volumeMode      absolute;   // Specific does not seem to work at this stage
+        injectionRate
+        {
+            T         40.0;         // Enter total rate of pollutant increase
+        }
+    }
+} 
+
