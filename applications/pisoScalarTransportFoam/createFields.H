@@ -47,7 +47,7 @@
     const dimensionSet dimSc(0, 0, 0, 0, 0, 0, 0);
     const dimensionSet dimDT(0, 2, -1, 0, 0, 0, 0);
 
-    Info<< "Reading Turbulent Schmidt Number Sc\n" << endl;
+    Info<< "Reading Turbulent Schmidt Number Sc\n";
     /*dimensionedScalar Sc
     (
         transportProperties.lookup("Sc")
@@ -62,8 +62,9 @@
             dimSc
         )
     );
+    Info << Sc << endl;
 
-    Info<< "Reading Molecular Diffusivity DT\n" << endl;
+    Info<< "Reading Molecular Diffusivity DT\n";
     /*dimensionedScalar DT
     (
         transportProperties.lookup("DT")
@@ -78,6 +79,7 @@
             dimDT
         )
     );
+    Info << DT << endl;
 
 
 #   include "createPhi.H"

@@ -80,7 +80,7 @@ int main(int argc, char *argv[])
               fvOptions(T)
             );
             //sources.constrain( TEqn() );
-            fvOptions.constrain( TEqn() );
+            //fvOptions.constrain( TEqn() );
             solve( TEqn() );
         }
 
