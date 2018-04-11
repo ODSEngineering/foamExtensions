@@ -39,21 +39,187 @@ Description
 #include "Ostream.H"
 #include "fvCFD.H"
 
+/*
+*
+*/
+std::vector<float> lineToVect(std::string str, char delimiter) {
+  std::vector<float> vect;
+  std::stringstream ss(str); // Turn the string into a stream.
+  string tok;
+
+  while(getline(ss, tok, delimiter)) {
+    vect.push_back( atof(tok.c_str()) );
+  }
+
+  return vect;
+}
+
+/*
+*
+*/
+std::vector<std::vector<std::vector<float> > > getValueArray
+(
+    const fvMesh& mesh,
+    const IOobject& fieldHeader,
+    wordList patchNames,
+    unsigned int nTimes,
+    std::vector<float>& values
+)
+{
+  word patchName;
+  typedef GeometricField<scalar, fvPatchField, volMesh> fieldType;
+  fieldType field(fieldHeader, mesh);
+
+  unsigned int nPatches = patchNames.size();
+  std::vector<std::vector<std::vector<float> > > valueArray;
+  valueArray.resize(nPatches);
+  for ( unsigned int i = 0 ; i < nTimes ; i++ ) { valueArray[i].resize(nTimes); }
+  //TODO: Step through all patches getting their size and setting a data structure
+  //forAll(patchNames, patchNameI)
+  //{
+    //patchName = patchNames[patchNameI];
+    //unsigned int patchSize = field.boundaryField()[patchi].size();
+  //}
+  return valueArray;
+}
+
+int setVectorPatchField
+(
+    const fvMesh& mesh,
+    const IOobject& fieldHeader,
+    const label timei,
+    unsigned int nTimes,
+    const label patchi,
+    std::vector<float>& values,
+    int& start_marker,
+    bool& done
+)
+{
+    unsigned int nValues = values.size() / 3;
+
+    if (!done)
+    {
+      typedef GeometricField<vector, fvPatchField, volMesh> fieldType;
+      fieldType field(fieldHeader, mesh);
+
+      unsigned int patchSize = field.boundaryField()[patchi].size();
+      if ( (start_marker + patchSize) > nValues ) {
+        std::cout << "Patch size ( " << patchSize << " ) != number of values ( " << nValues << " ) exiting"<< std::endl;
+        return 0;
+      }
+
+      Field<vector> patchValues( nValues );
+
+      SubField<vector>
+      (
+          patchValues,
+          patchSize
+      ) = field.boundaryField()[patchi];
+
+      int index = 0;
+      for (unsigned int i=0; i<patchSize; i++)
+      {
+          index = start_marker + i*nTimes + timei;
+          for(int j = 0; j < 3; ++j) {
+            patchValues[i][j] = values[index*3 + j];
+          }
+      }
+
+      //Info << "Max index " << index << endl;
+
+      Info<< "    On patch "
+          << field.boundaryField()[patchi].patch().name()
+          << " set " << patchSize << " values" << endl;
+
+      field.boundaryFieldRef()[patchi] == SubField<vector>
+      (
+          patchValues,
+          patchSize
+      );
+
+      field.write();
+
+      done = true;
+      return nTimes*patchSize;
+    }
+  return 0;
+}
+
+int setScalarPatchField
+(
+    const fvMesh& mesh,
+    const IOobject& fieldHeader,
+    const label timei,
+    unsigned int nTimes,
+    const label patchi,
+    std::vector<float>& values,
+    int& start_marker,
+    bool& done
+)
+{
+    if (!done)
+    {
+      typedef GeometricField<scalar, fvPatchField, volMesh> fieldType;
+      fieldType field(fieldHeader, mesh);
+
+      unsigned int patchSize = field.boundaryField()[patchi].size();
+
+      if ( (start_marker + patchSize) > values.size() ) {
+        std::cout << "Patch size ( " << patchSize << " ) != number of values ( " << values.size() << " ) exiting"<< std::endl;
+        return 0;
+      }
+
+      Field<scalar> patchValues( values.size() );
+
+      SubField<scalar>
+      (
+          patchValues,
+          patchSize
+      ) = field.boundaryField()[patchi];
+
+      for (unsigned int i=0; i<patchSize; i++)
+      {
+          int index = start_marker + i*nTimes + timei;
+          patchValues[i] = values[index];
+      }
+
+      Info<< "    On patch "
+          << field.boundaryField()[patchi].patch().name()
+          << " set " << patchSize << " values" << endl;
+
+      field.boundaryFieldRef()[patchi] == SubField<scalar>
+      (
+          patchValues,
+          patchSize
+      );
+
+      field.write();
+
+      done = true;
+
+      return nTimes*patchSize;
+    }
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
-    unsigned int i = 0;
-
-    // Read in float-values (one per line)
+    // Read in values
     float f;
     std::vector<float> values;
     while (std::cin >> f) { values.push_back(f); }
 
-    std::cout << "Read " << values.size() << " values."<< std::endl;
+    //TODO:: Read in multiple time values and multiple patches in one hit
+    // Parse in a huge array from stdin with the values ordered by:
+    // cell*times*patch and then parse that into a dictionary or array or arrays
+    // which we can then use to set the values
+    std::cout << "Read " << values.size() << " values from stdin."<< std::endl;
 
     timeSelector::addOptions();
     argList::noBanner();
     argList::validArgs.append("fieldName");
     argList::validArgs.append("patchName");
+    argList::addOption("patchNames", "patchNames");
 #   include "setRootCase.H"
 #   include "createTime.H"
     instantList timeDirs = timeSelector::select0(runTime, args);
@@ -61,73 +227,77 @@ int main(int argc, char *argv[])
 
     word fieldName(args.argRead<word>(1));
     word patchName(args.argRead<word>(2));
+    wordList patchNames;
 
-    typedef GeometricField<scalar, fvPatchField, volMesh> fieldType;
+    if (args.optionFound("patchNames")) {
+      patchNames = args.optionReadList<word>("patchNames");
+    } else {
+      patchNames.append(patchName);
+    }
+    Info << "Calculating for patche(s):" << patchNames << endl;
 
-    forAll(timeDirs, timeI)
+    unsigned int nTimes = timeDirs.size();
+    Info << "Number of times = " << nTimes << endl;
+
+    int counter = 0;
+    int start_marker = 0;
+    forAll(patchNames, patchNameI)
     {
+      start_marker += counter;
+      patchName = patchNames[patchNameI];
+
+      Info << "Setting patch " << patchName << endl;
+      Info << "Start marker at "<< start_marker << endl;
+
+      // Check if this patch exists
+      label patchI = mesh.boundaryMesh().findPatchID(patchName);
+      if (patchI < 0)
+      {
+          FatalError
+              << "Unable to find patch " << patchName << nl
+              << exit(FatalError);
+      }
+
+      forAll(timeDirs, timeI)
+      {
         runTime.setTime(timeDirs[timeI], timeI);
         Info<< "Time = " << runTime.timeName() << endl;
 
-        IOobject fieldHeader
+        IOobject io
         (
             fieldName,
-            mesh.time().timeName(),
+            runTime.timeName(),
             mesh,
             IOobject::MUST_READ
         );
 
-        // Check field exists
-        if (fieldHeader.typeHeaderOk<volScalarField>(false))
+
+        if (io.typeHeaderOk<volScalarField>(false))
         {
-            Info<< "    Setting patchField values of "
-                << fieldHeader.headerClassName()
-                << " " << fieldName << endl;
+            mesh.readUpdate();
 
-            fieldType field(fieldHeader, mesh);
+            bool done = false;
+            if ( io.headerClassName() == "volScalarField") {
+              counter = setScalarPatchField(mesh, io, timeI, nTimes, patchI, values, start_marker, done);
+            } else {
+              counter = setVectorPatchField(mesh, io, timeI, nTimes, patchI, values, start_marker, done);
+            }
 
-            label patchi = mesh.boundaryMesh().findPatchID(patchName);
-            if (patchi < 0)
+            if (!done)
             {
                 FatalError
-                    << "Unable to find patch " << patchName << nl
-                    << exit(FatalError);
+                    << "Only possible to average volVectorFields or volScalarFields."
+                    << " Field " << fieldName << " is of type "
+                    << io.headerClassName()
+                    << nl << exit(FatalError);
             }
-
-            unsigned int patchSize = field.boundaryField()[patchi].size();
-            if ( patchSize != values.size() ) { return 0; }
-
-            Field<scalar> patchValues( values.size() );
-
-            SubField<scalar>
-            (
-                patchValues,
-                patchSize
-            ) = field.boundaryField()[patchi];
-
-            for (i=0; i<values.size(); i++)
-            {
-                patchValues[i] = values[i];
-            }
-
-            Info<< "    On patch "
-                << field.boundaryField()[patchi].patch().name()
-                << " set " << patchSize << " values" << endl;
-
-            typename GeometricField<scalar, fvPatchField, volMesh>::
-                        Boundary& fieldBf = field.boundaryFieldRef();
-
-            fieldBf[patchi] == SubField<scalar>
-            (
-                patchValues,
-                patchSize
-            );
-
-            field.write();
-
         }
+        else
+        {
+            Info<< "    No field " << fieldName << endl;
+        }
+      }
     }
-
     Info<< "End\n" << endl;
 
     return 1;
